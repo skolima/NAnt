@@ -23,7 +23,7 @@ using System.Text;
 using System.Xml;
 using System.Configuration;
 
-namespace SourceForge.NAnt{
+namespace NAnt.Core{
     /// <summary>
     /// Custom configuration section handler for the <nantsettings/> element.
     /// </summary>
