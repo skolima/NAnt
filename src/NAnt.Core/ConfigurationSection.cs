@@ -34,5 +34,5 @@ namespace NAnt.Core{
         public Object Create(Object parent, Object configContext, XmlNode node) {
             return node;
         }
-	}
+    }
 }
