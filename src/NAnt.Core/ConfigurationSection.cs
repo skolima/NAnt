@@ -18,19 +18,16 @@
 //
 // Scott Hernandez (ScottHernandez@hotmail.com
 
-
 using System;
 using System.Text;
 using System.Xml;
 using System.Configuration;
 
 namespace SourceForge.NAnt{
-
     /// <summary>
-    ///     Custom configuration section handler for the <nantsettings/> element
+    /// Custom configuration section handler for the <nantsettings/> element.
     /// </summary>
     public class ConfigurationSection : IConfigurationSectionHandler {
-
         /// <summary>
         /// This just passed things through. Return the node read from the config file.
         /// </summary>
