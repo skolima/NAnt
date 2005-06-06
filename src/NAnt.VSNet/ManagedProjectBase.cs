@@ -286,7 +286,7 @@ namespace NAnt.VSNet {
         }
 
 
-        protected override bool Build(string solutionConfiguration) {
+        protected override BuildResult Build(string solutionConfiguration) {
             bool bSuccess = true;
             bool outputUpdated;
             string tempFile = null;
@@ -301,7 +301,7 @@ namespace NAnt.VSNet {
                 if (!PreBuild(cs)) {
                     // no longer bother trying to build the project and do not
                     // execute any post-build events
-                    return false;
+                    return BuildResult.Failed;
                 }
 
                 // ensure temp directory exists
@@ -316,6 +316,9 @@ namespace NAnt.VSNet {
                     // project output is up-to-date
                     outputUpdated = false;
                 } else {
+                    // prepare the project for build
+                    Prepare(solutionConfiguration);
+                    
                     // check if project does not contain any sources
                     if (_sourceFiles.Count == 0) {
                         // create temp file
@@ -486,7 +489,7 @@ namespace NAnt.VSNet {
                     Log(Level.Error, "Build failed.");
                 }
 
-                return bSuccess;
+                return outputUpdated ? BuildResult.SuccessOutputUpdated : BuildResult.Success;
             } finally {
                 // check if temporary file was created to support empty projects
                 if (tempFile != null) {
@@ -921,8 +924,26 @@ namespace NAnt.VSNet {
 
         public static string LoadGuid(string fileName) {
             try {
-                XmlDocument doc = LoadXmlDocument(fileName);
-                return ProjectSettings.GetProjectGuid(fileName, doc.DocumentElement);
+                using (StreamReader sr = new StreamReader(fileName))
+                {
+                    XmlTextReader guidReader = new XmlTextReader(sr);
+                    
+                    while (guidReader.Read()) {
+                        if (guidReader.NodeType == XmlNodeType.Element) {
+                            while (guidReader.Read()) {
+                                if (guidReader.NodeType == XmlNodeType.Element) {
+                                    if (guidReader.MoveToAttribute( "ProjectGuid" ))
+                                        return guidReader.Value;
+                                }                                        
+                            }
+                        }
+                    }
+                }
+
+                throw new BuildException(string.Format(CultureInfo.InvariantCulture,
+                    "Couldn't locate ProjectGuid in project '{0}'", fileName),
+                    Location.UnknownLocation);
+
             } catch (Exception ex) {
                 throw new BuildException(string.Format(CultureInfo.InvariantCulture,
                     "Error loading GUID of project '{0}'.", fileName), 
@@ -1050,6 +1071,10 @@ namespace NAnt.VSNet {
 
         #endregion Private Static Fields
 
+        /// <summary>
+        /// Groups a set of <see cref="Resource" /> instances for a specific
+        /// culture.
+        /// </summary>
         private class LocalizedResourceSet {
             #region Private Instance Fields
 
@@ -1060,6 +1085,11 @@ namespace NAnt.VSNet {
 
             #region Public Instance Constructors
 
+            /// <summary>
+            /// Initializes a new <see cref="LocalizedResourceSet" /> instance
+            /// for the specified culture.
+            /// </summary>
+            /// <param name="culture">A <see cref="CultureInfo" />.</param>
             public LocalizedResourceSet(CultureInfo culture) {
                 if (culture == null) {
                     throw new ArgumentNullException("culture");
@@ -1073,10 +1103,17 @@ namespace NAnt.VSNet {
 
             #region Public Instance Properties
 
+            /// <summary>
+            /// Gets the <see cref="CultureInfo" /> of the 
+            /// <see cref="LocalizedResourceSet" />.
+            /// </summary>
             public CultureInfo Culture {
                 get { return _culture; }
             }
 
+            /// <summary>
+            /// Gets the set of localized resources.
+            /// </summary>
             public ArrayList Resources {
                 get { return _resources; }
             }
@@ -1085,17 +1122,45 @@ namespace NAnt.VSNet {
 
             #region Public Instance Methods
 
+            /// <summary>
+            /// Gets the intermediate build directory in which the satellite
+            /// assembly is built.
+            /// </summary>
+            /// <param name="projectConfig">The project build configuration.</param>
+            /// <returns>
+            /// The intermediate build directory in which the satellite assembly
+            /// is built.
+            /// </returns>
             public DirectoryInfo GetBuildDirectory(ConfigurationSettings projectConfig) {
                 return new DirectoryInfo(FileUtils.CombinePaths(
                     projectConfig.ObjectDir.FullName, Culture.Name));
             }
 
+            /// <summary>
+            /// Gets a <see cref="FileInfo" /> representing the path to the 
+            /// intermediate file location of the satellite assembly.
+            /// </summary>
+            /// <param name="projectConfig">The project build configuration.</param>
+            /// <param name="projectSettings">The project settings.</param>
+            /// <returns>
+            /// A <see cref="FileInfo" /> representing the path to the 
+            /// intermediate file location of the satellite assembly.
+            /// </returns>
             public FileInfo GetSatelliteAssemblyPath(ConfigurationSettings projectConfig, ProjectSettings projectSettings) {
                 DirectoryInfo buildDir = GetBuildDirectory(projectConfig);
                 return new FileInfo(FileUtils.CombinePaths(buildDir.FullName,
                     GetSatelliteFileName(projectSettings)));
             }
 
+            /// <summary>
+            /// Gets path of the satellite assembly, relative to the output
+            /// directory.
+            /// </summary>
+            /// <param name="projectSettings">The project settings.</param>
+            /// <returns>
+            /// The path of the satellite assembly, relative to the output
+            /// directory.
+            /// </returns>
             public string GetRelativePath(ProjectSettings projectSettings) {
                 return FileUtils.CombinePaths(Culture.Name, GetSatelliteFileName(
                     projectSettings));
