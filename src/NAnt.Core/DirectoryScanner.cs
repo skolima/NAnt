@@ -124,6 +124,8 @@ namespace NAnt.Core {
         private ArrayList _searchDirIsRecursive;
         private bool _caseSensitive;
 
+		private readonly object syncRoot = new object();
+
         #endregion Private Instance Fields
 
         #region Private Static Fields
@@ -223,10 +225,14 @@ namespace NAnt.Core {
         public bool CaseSensitive {
             get { return _caseSensitive; }
             set {
-                if (value != _caseSensitive) {
-                    _caseSensitive = value;
-                    Reset ();
-                }
+				lock (syncRoot)
+				{
+					if (value != _caseSensitive)
+					{
+						_caseSensitive = value;
+						Reset();
+					}
+				}
             }
         }
 
@@ -249,25 +255,34 @@ namespace NAnt.Core {
         /// <see cref="Environment.CurrentDirectory">current directory</see>.
         /// </summary>
         public DirectoryInfo BaseDirectory {
-            get { 
-                if (_baseDirectory == null) {
-                    _baseDirectory = new DirectoryInfo(CleanPath(
-                        Environment.CurrentDirectory).ToString());
-                }
-                return _baseDirectory;
+            get {
+				lock (syncRoot)
+				{
+					if (_baseDirectory == null)
+					{
+						_baseDirectory = new DirectoryInfo(CleanPath(
+						                                   	Environment.CurrentDirectory).ToString());
+					}
+					return _baseDirectory;
+				}
             }
-            set { 
-                if (value != null) {
-                    // convert both slashes and backslashes to directory separator
-                    // char
-                    value = new DirectoryInfo(CleanPath(
-                        value.FullName).ToString());
-                }
+            set {
+				lock (syncRoot)
+				{
+					if (value != null)
+					{
+						// convert both slashes and backslashes to directory separator
+						// char
+						value = new DirectoryInfo(CleanPath(
+						                          	value.FullName).ToString());
+					}
 
-                if (value != _baseDirectory) {
-                    _baseDirectory = value;
-                    Reset ();
-                }
+					if (value != _baseDirectory)
+					{
+						_baseDirectory = value;
+						Reset();
+					}
+				}
             }
         }
 
@@ -276,10 +291,14 @@ namespace NAnt.Core {
         /// </summary>
         public StringCollection FileNames {
             get {
-                if (_fileNames == null) {
-                    Scan();
-                }
-                return _fileNames;
+				lock (syncRoot)
+				{
+					if (_fileNames == null)
+					{
+						Scan();
+					}
+					return _fileNames;
+				}
             }
         }
 
@@ -288,10 +307,14 @@ namespace NAnt.Core {
         /// </summary>
         public StringCollection DirectoryNames {
             get {
-                if (_directoryNames == null) {
-                    Scan();
-                }
-                return _directoryNames;
+				lock (syncRoot)
+				{
+					if (_directoryNames == null)
+					{
+						Scan();
+					}
+					return _directoryNames;
+				}
             }
         }
 
@@ -300,10 +323,14 @@ namespace NAnt.Core {
         /// </summary>
         public StringCollection ScannedDirectories {
             get {
-                if (_scannedDirectories == null) {
-                    Scan();
-                }
-                return _scannedDirectories;
+				lock (syncRoot)
+				{
+					if (_scannedDirectories == null)
+					{
+						Scan();
+					}
+					return _scannedDirectories;
+				}
             }
         }
 
@@ -316,16 +343,18 @@ namespace NAnt.Core {
         /// <see cref="BaseDirectory" /> or absolute), to search for filesystem objects.
         /// </summary>
         public void Scan() {
-            _includePatterns = new ArrayList();
-            _includeNames = new StringCollectionWithGoodToString ();
-            _excludePatterns = new ArrayList();
-            _excludeNames = new StringCollectionWithGoodToString ();
-            _fileNames = new StringCollectionWithGoodToString ();
-            _directoryNames = new DirScannerStringCollection(CaseSensitive);
+			lock (syncRoot)
+			{
+				_includePatterns = new ArrayList();
+				_includeNames = new StringCollectionWithGoodToString();
+				_excludePatterns = new ArrayList();
+				_excludeNames = new StringCollectionWithGoodToString();
+				_fileNames = new StringCollectionWithGoodToString();
+				_directoryNames = new DirScannerStringCollection(CaseSensitive);
 
-            _searchDirectories = new DirScannerStringCollection(CaseSensitive);
-            _searchDirIsRecursive = new ArrayList();
-            _scannedDirectories = new DirScannerStringCollection(CaseSensitive);
+				_searchDirectories = new DirScannerStringCollection(CaseSensitive);
+				_searchDirIsRecursive = new ArrayList();
+				_scannedDirectories = new DirScannerStringCollection(CaseSensitive);
 
 #if DEBUG_REGEXES
             Console.WriteLine("*********************************************************************");
@@ -345,18 +374,20 @@ namespace NAnt.Core {
             Console.WriteLine("--- Starting Scan ---");
 #endif
 
-            // convert given NAnt patterns to regex patterns with absolute paths
-            // side effect: searchDirectories will be populated
-            ConvertPatterns(_includes, _includePatterns, _includeNames, true);
-            ConvertPatterns(_excludes, _excludePatterns, _excludeNames, false);
+				// convert given NAnt patterns to regex patterns with absolute paths
+				// side effect: searchDirectories will be populated
+				ConvertPatterns(_includes, _includePatterns, _includeNames, true);
+				ConvertPatterns(_excludes, _excludePatterns, _excludeNames, false);
 
-            for (int index = 0; index < _searchDirectories.Count; index++) {
-                ScanDirectory(_searchDirectories[index], (bool) _searchDirIsRecursive[index]);
-            }
-            
+				for (int index = 0; index < _searchDirectories.Count; index++)
+				{
+					ScanDirectory(_searchDirectories[index], (bool) _searchDirIsRecursive[index]);
+				}
+
 #if DEBUG_REGEXES
             Console.WriteLine("*********************************************************************");
 #endif
+			}
         }
 
         #endregion Public Instance Methods

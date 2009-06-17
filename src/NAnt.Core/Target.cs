@@ -21,6 +21,7 @@
 // William E. Caputo (wecaputo@thoughtworks.com | logosity@yahoo.com)
 
 using System;
+using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Globalization;
 using System.Xml;
@@ -39,6 +40,7 @@ namespace NAnt.Core {
         private string _unlessCondition;
         private StringCollection _dependencies = new StringCollection();
         private bool _executed;
+		private Dictionary<string, object> _unexecutedDependenciesSet = new Dictionary<string,object>();
 
         #endregion Private Instance Fields
 
@@ -178,6 +180,7 @@ namespace NAnt.Core {
                     string dependency = str.Trim();
                     if (dependency.Length > 0) {
                         Dependencies.Add(dependency);
+						_unexecutedDependenciesSet.Add(dependency, this);
                     }
                 }
             }
@@ -190,6 +193,36 @@ namespace NAnt.Core {
         public StringCollection Dependencies {
             get { return _dependencies; }
         }
+
+		public override Project Project
+		{
+			get
+			{
+				return base.Project;
+			}
+			set
+			{
+				base.Project = value;
+				base.Project.TargetExecuted += (sender, e) =>
+				{
+					if (e.Target != null)
+						lock (_unexecutedDependenciesSet)
+						{
+							if (_unexecutedDependenciesSet.ContainsKey(e.Target.Name))
+								_unexecutedDependenciesSet.Remove(e.Target.Name);
+						}
+				};
+			}
+		}
+
+    	public bool DependenciesAlreadyExecuted
+    	{
+    		get
+    		{
+				lock (_unexecutedDependenciesSet)
+					return _unexecutedDependenciesSet.Count == 0;
+    		}
+    	}
 
         #endregion Public Instance Properties
 
@@ -231,41 +264,64 @@ namespace NAnt.Core {
         /// Executes dependent targets first, then the target.
         /// </summary>
         public void Execute() {
-            if (IfDefined && !UnlessDefined) {
-                try {
-                    Project.OnTargetStarted(this, new BuildEventArgs(this));
-                
-                    // select all the task nodes and execute them
-                    foreach (XmlNode childNode in XmlNode) {
-                        if (!(childNode.NodeType == XmlNodeType.Element)|| !childNode.NamespaceURI.Equals(NamespaceManager.LookupNamespace("nant"))) {
-                            continue;
-                        }
-                        
-                        if (TypeFactory.TaskBuilders.Contains(childNode.Name)) {
-                            Task task = Project.CreateTask(childNode, this);
-                            if (task != null) {
-                                task.Execute();
-                            }
-                        } else if (TypeFactory.DataTypeBuilders.Contains(childNode.Name)) {
-                            DataTypeBase dataType = Project.CreateDataTypeBase(childNode);
-                            Project.Log(Level.Verbose, "Adding a {0} reference with id '{1}'.", 
-                                childNode.Name, dataType.ID);
-                            if (!Project.DataTypeReferences.Contains(dataType.ID)) {
-                                Project.DataTypeReferences.Add(dataType.ID, dataType);
-                            } else {
-                                Project.DataTypeReferences[dataType.ID] = dataType; // overwrite with the new reference.
-                            }
-                        } else {
-                            throw new BuildException(string.Format(CultureInfo.InvariantCulture, 
-                                ResourceUtils.GetString("NA1071"), 
-                                childNode.Name), Project.LocationMap.GetLocation(childNode));
-                        }
-                    }
-                } finally {
-                    _executed = true;
-                    Project.OnTargetFinished(this, new BuildEventArgs(this));
-                }
-            }
+			try
+			{
+				if (IfDefined && !UnlessDefined)
+				{
+					try
+					{
+						Project.OnTargetStarted(this, new BuildEventArgs(this));
+
+						// select all the task nodes and execute them
+						foreach (XmlNode childNode in XmlNode)
+						{
+							if (!(childNode.NodeType == XmlNodeType.Element) ||
+								!childNode.NamespaceURI.Equals(NamespaceManager.LookupNamespace("nant")))
+							{
+								continue;
+							}
+
+							if (TypeFactory.TaskBuilders.Contains(childNode.Name))
+							{
+								Task task = Project.CreateTask(childNode, this);
+								if (task != null)
+								{
+									task.Execute();
+								}
+							}
+							else if (TypeFactory.DataTypeBuilders.Contains(childNode.Name))
+							{
+								DataTypeBase dataType = Project.CreateDataTypeBase(childNode);
+								Project.Log(Level.Verbose, "Adding a {0} reference with id '{1}'.",
+											childNode.Name, dataType.ID);
+								if (!Project.DataTypeReferences.Contains(dataType.ID))
+								{
+									Project.DataTypeReferences.Add(dataType.ID, dataType);
+								}
+								else
+								{
+									Project.DataTypeReferences[dataType.ID] = dataType; // overwrite with the new reference.
+								}
+							}
+							else
+							{
+								throw new BuildException(string.Format(CultureInfo.InvariantCulture,
+																	   ResourceUtils.GetString("NA1071"),
+																	   childNode.Name), Project.LocationMap.GetLocation(childNode));
+							}
+						}
+					}
+					finally
+					{
+						_executed = true;
+						Project.OnTargetFinished(this, new BuildEventArgs(this));
+					}
+				}
+			}
+			finally
+			{
+				Project.OnTargetExecuted(this, new BuildEventArgs(this));
+			}
         }
 
         #endregion Public Instance Methods

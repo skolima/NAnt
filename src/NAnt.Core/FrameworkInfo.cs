@@ -54,6 +54,7 @@ namespace NAnt.Core {
         private Project _project;
         private FileSet _taskAssemblies;
         private FileSet[] _referenceAssemblies;
+		private readonly object _referenceAssembliesSyncRoot = new object();
         private string[] _toolPaths;
         private InitStatus _status = InitStatus.Uninitialized;
 
@@ -508,22 +509,23 @@ namespace NAnt.Core {
                 // ensure we're not dealing with an invalid framework
                 AssertNotInvalid();
 
-                if (_referenceAssemblies == null) {
-                    // reference assemblies
-                    XmlNodeList referenceAssemblies = _frameworkNode.SelectNodes(
-                        "nant:reference-assemblies", NamespaceManager);
-                    _referenceAssemblies = new FileSet [referenceAssemblies.Count];
-                    for (int i = 0; i < referenceAssemblies.Count; i++) {
-                        XmlNode node = referenceAssemblies [i];
-                        FileSet fileset = new FileSet();
-                        fileset.Project = Project;
-                        fileset.NamespaceManager = NamespaceManager;
-                        fileset.Parent = Project;
-                        fileset.ID = "reference-assemblies-" + i.ToString (CultureInfo.InvariantCulture);
-                        fileset.Initialize(node, Project.Properties, this);
-                        _referenceAssemblies [i] = fileset;
-                    }
-                }
+				lock(_referenceAssembliesSyncRoot)
+					if (_referenceAssemblies == null) {
+						// reference assemblies
+						XmlNodeList referenceAssemblies = _frameworkNode.SelectNodes(
+							"nant:reference-assemblies", NamespaceManager);
+						_referenceAssemblies = new FileSet [referenceAssemblies.Count];
+						for (int i = 0; i < referenceAssemblies.Count; i++) {
+							XmlNode node = referenceAssemblies [i];
+							FileSet fileset = new FileSet();
+							fileset.Project = Project;
+							fileset.NamespaceManager = NamespaceManager;
+							fileset.Parent = Project;
+							fileset.ID = "reference-assemblies-" + i.ToString (CultureInfo.InvariantCulture);
+							fileset.Initialize(node, Project.Properties, this);
+							_referenceAssemblies [i] = fileset;
+						}
+					}
                 return _referenceAssemblies;
             }
         }

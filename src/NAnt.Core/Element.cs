@@ -1454,33 +1454,51 @@ namespace NAnt.Core {
             /// An <see cref="IAttributeSetter" /> for the given <see cref="Type" />.
             /// </returns>
             private IAttributeSetter CreateAttributeSetter(Type attributeType) {
-                if (AttributeSetters.ContainsKey(attributeType)) {
-                    return (IAttributeSetter) AttributeSetters[attributeType];
-                }
+				lock (AttributeSetters.SyncRoot)
+				{
+					if (AttributeSetters.ContainsKey(attributeType))
+					{
+						return (IAttributeSetter) AttributeSetters[attributeType];
+					}
 
-                IAttributeSetter attributeSetter = null;
+					IAttributeSetter attributeSetter = null;
 
-                if (attributeType.IsEnum) {
-                    attributeSetter = new EnumAttributeSetter();
-                } else if (attributeType == typeof(Encoding)) {
-                    attributeSetter = new EncodingAttributeSetter();
-                } else if (attributeType == typeof(FileInfo)) {
-                    attributeSetter = new FileAttributeSetter();
-                } else if (attributeType == typeof(DirectoryInfo)) {
-                    attributeSetter = new DirectoryAttributeSetter();
-                } else if (attributeType == typeof(PathSet)) {
-                    attributeSetter = new PathSetAttributeSetter();
-                } else if (attributeType == typeof(Uri)) {
-                    attributeSetter = new UriAttributeSetter();
-                } else {
-                    attributeSetter = new ConvertableAttributeSetter();
-                }
+					if (attributeType.IsEnum)
+					{
+						attributeSetter = new EnumAttributeSetter();
+					}
+					else if (attributeType == typeof (Encoding))
+					{
+						attributeSetter = new EncodingAttributeSetter();
+					}
+					else if (attributeType == typeof (FileInfo))
+					{
+						attributeSetter = new FileAttributeSetter();
+					}
+					else if (attributeType == typeof (DirectoryInfo))
+					{
+						attributeSetter = new DirectoryAttributeSetter();
+					}
+					else if (attributeType == typeof (PathSet))
+					{
+						attributeSetter = new PathSetAttributeSetter();
+					}
+					else if (attributeType == typeof (Uri))
+					{
+						attributeSetter = new UriAttributeSetter();
+					}
+					else
+					{
+						attributeSetter = new ConvertableAttributeSetter();
+					}
 
-                if (attributeSetter != null) {
-                    AttributeSetters.Add(attributeType, attributeSetter);
-                }
+					if (attributeSetter != null)
+					{
+						AttributeSetters.Add(attributeType, attributeSetter);
+					}
 
-                return attributeSetter;
+					return attributeSetter;
+				}
             }
 
             #endregion Private Instance Methods

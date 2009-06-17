@@ -22,17 +22,15 @@
 
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.Collections.Specialized;
-using System.ComponentModel;
 using System.Configuration;
 using System.Globalization;
 using System.IO;
 using System.Reflection;
 using System.Text;
+using System.Threading;
 using System.Xml;
-
-using Microsoft.Win32;
-
 using NAnt.Core.Tasks;
 using NAnt.Core.Util;
 
@@ -118,6 +116,7 @@ namespace NAnt.Core {
         public event BuildEventHandler BuildFinished;
         public event BuildEventHandler TargetStarted;
         public event BuildEventHandler TargetFinished;
+		public event BuildEventHandler TargetExecuted;
         public event BuildEventHandler TaskStarted;
         public event BuildEventHandler TaskFinished;
         public event BuildEventHandler MessageLogged;
@@ -152,6 +151,20 @@ namespace NAnt.Core {
         private XmlNamespaceManager _nsMgr = new XmlNamespaceManager(new NameTable()); //used to map "nant" to default namespace.
         [NonSerialized()]
         private DataTypeBaseDictionary _dataTypeReferences = new DataTypeBaseDictionary();
+		[NonSerialized()]
+		private readonly Dictionary<string, ManualResetEvent> targetExecuted
+			= new Dictionary<string,ManualResetEvent>();
+		[NonSerialized()]
+		private readonly ManualResetEvent workerFinished = new ManualResetEvent(false);
+		[NonSerialized()]
+		private readonly object activeThreadCountSyncRoot = new object();
+		[NonSerialized()]
+		private volatile int activeThreadCount;
+		[NonSerialized()]
+		private volatile int workerId;
+		// placeholder for exceptions in worker threads;
+		[NonSerialized()]
+		private volatile Exception workerThreadException;
 
         /// <summary>
         /// Holds the default threshold for build loggers.
@@ -170,7 +183,7 @@ namespace NAnt.Core {
         /// <param name="threshold">The message threshold.</param>
         /// <param name="indentLevel">The project indentation level.</param>
         public Project(XmlDocument doc, Level threshold, int indentLevel) {
-            // use NAnt settings from application configuration file for loading 
+        	// use NAnt settings from application configuration file for loading 
             // internal configuration settings
             _configurationNode = GetConfigurationNode();
 
@@ -193,7 +206,7 @@ namespace NAnt.Core {
         /// library.
         /// </remarks>
         public Project(XmlDocument doc, Level threshold, int indentLevel, XmlNode configurationNode) {
-            // set configuration node to use for loading internal configuration 
+        	// set configuration node to use for loading internal configuration 
             // settings
             _configurationNode = configurationNode;
 
@@ -215,7 +228,7 @@ namespace NAnt.Core {
         /// If the source is a uri of form 'file:///path' then use the path part.
         /// </remarks>
         public Project(string uriOrFilePath, Level threshold, int indentLevel) {
-            // use NAnt settings from application configuration file for loading 
+        	// use NAnt settings from application configuration file for loading 
             // internal configuration settings
             _configurationNode = GetConfigurationNode();
 
@@ -242,7 +255,7 @@ namespace NAnt.Core {
         /// If the source is a uri of form 'file:///path' then use the path part.
         /// </remarks>
         public Project(string uriOrFilePath, Level threshold, int indentLevel, XmlNode configurationNode) {
-            // set configuration node to use for loading internal configuration 
+        	// set configuration node to use for loading internal configuration 
             // settings
             _configurationNode = configurationNode;
 
@@ -269,7 +282,7 @@ namespace NAnt.Core {
         /// discovery of extension assemblies and framework configuration.
         /// </remarks>
         internal Project(string uriOrFilePath, Project parent) {
-            // set configuration node to use for loading internal configuration 
+        	// set configuration node to use for loading internal configuration 
             // settings
             _configurationNode = parent.ConfigurationNode;
 
@@ -304,13 +317,14 @@ namespace NAnt.Core {
         /// Optimized for framework initialization projects, by skipping automatic
         /// discovery of extension assemblies and framework configuration.
         /// </remarks>
-        internal Project(XmlDocument doc) {
-            // initialize project
+        internal Project(XmlDocument doc)
+        {
+        	// initialize project
             CtorHelper(doc, Level.None, 0, Optimizations.SkipAutomaticDiscovery |
                 Optimizations.SkipFrameworkConfiguration);
         }
-    
-        #endregion Internal Instance Constructors
+
+    	#endregion Internal Instance Constructors
 
         #region Public Instance Properties
 
@@ -844,10 +858,32 @@ namespace NAnt.Core {
         /// <param name="sender">The source of the event.</param>
         /// <param name="e">A <see cref="BuildEventArgs" /> that contains the event data.</param>
         public void OnTargetFinished(object sender, BuildEventArgs e) {
-            if (TargetFinished != null) {
-                TargetFinished(sender, e);
+        	BuildEventHandler targetFinishedHandler = TargetFinished;
+			if (targetFinishedHandler != null)
+			{
+				targetFinishedHandler(sender, e);
             }
         }
+
+		/// <summary>
+		/// Dispatches a <see cref="TargetExecuted" /> event to the build listeners 
+		/// for this <see cref="Project" />.
+		/// </summary>
+		/// <param name="sender">The source of the event.</param>
+		/// <param name="e">A <see cref="BuildEventArgs" /> that contains the event data.</param>
+		public void OnTargetExecuted(object sender, BuildEventArgs e)
+		{
+			BuildEventHandler targetExecutedHandler = TargetExecuted;
+			if (targetExecutedHandler != null)
+			{
+				targetExecutedHandler(sender, e);
+				if (e.Target != null)
+					lock (targetExecuted)
+						if (targetExecuted.ContainsKey(e.Target.Name))
+							targetExecuted[e.Target.Name].Set();
+			}
+		}
+
         /// <summary>
         /// Dispatches a <see cref="TaskStarted" /> event to the build listeners 
         /// for this <see cref="Project" />.
@@ -1018,6 +1054,12 @@ namespace NAnt.Core {
             // store calling target
             Target callingTarget = _currentTarget;
 
+			lock(targetExecuted)
+			{
+				if(!targetExecuted.ContainsKey(targetName))
+					targetExecuted.Add(targetName, new ManualResetEvent(false));
+			}
+
             do {
                 // determine target that should be executed
                 currentTarget = (Target) sortedTargets[currentIndex++];
@@ -1028,18 +1070,72 @@ namespace NAnt.Core {
                 // only execute targets that have not been executed already, if 
                 // we are not forcing.
                 if (forceDependencies || !currentTarget.Executed || currentTarget.Name == targetName) {
-                    currentTarget.Execute();
+					while (true)
+                	{
+						//break as soon as possible
+						CheckPendingExceptions();
+						if (currentTarget.DependenciesAlreadyExecuted)
+						{
+							lock (activeThreadCountSyncRoot)
+							{
+								if (activeThreadCount < Environment.ProcessorCount * 2)
+								{
+									Thread worker = new Thread((target) => 
+										{
+											try
+											{
+												((Target) target).Execute();
+											}
+											catch (Exception ex)
+											{
+												workerThreadException = ex;
+											}
+											lock (activeThreadCountSyncRoot)
+												activeThreadCount--;
+											workerFinished.Set();
+										});
+									worker.Name = String.Format("[W{0}] {1}", workerId++, currentTarget.Name);
+									worker.Start(currentTarget);
+									activeThreadCount++;
+									break;
+								}
+							}
+							// no worker threads available, execute on MainThread
+							currentTarget.Execute();
+							break;
+						}
+                		// TODO: in theory, the timeout here is not needed if we don't deadlock
+                		workerFinished.WaitOne();
+                	}
                 }
             } while (currentTarget.Name != targetName);
 
-            // restore calling target, as a <call> task might have caused the 
+			//wait until targetName target has executed ('while loop' finishes when targetName has been scheduled)
+        	targetExecuted[targetName].WaitOne();
+
+			CheckPendingExceptions();
+
+        	// restore calling target, as a <call> task might have caused the 
             // current target to be executed and when finished executing this 
             // target, the target that contained the <call> task should be 
             // considered the current target again
             _currentTarget = callingTarget;
         }
 
-        /// <summary>
+    	private void CheckPendingExceptions()
+    	{
+    		if (workerThreadException != null)
+    		{
+    			Exception exception =
+    				(Exception) Activator.CreateInstance(
+    				            	workerThreadException.GetType(),
+    				            	workerThreadException.Message,
+    				            	workerThreadException);
+    			throw exception;
+    		}
+    	}
+
+    	/// <summary>
         /// Executes the default target and wraps in error handling and time 
         /// stamping.
         /// </summary>

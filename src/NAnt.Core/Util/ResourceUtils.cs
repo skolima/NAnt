@@ -172,29 +172,35 @@ namespace NAnt.Core.Util {
         /// ]]>
         /// </code>
         /// </example>
-        public static string GetString(string name, CultureInfo culture, Assembly assembly) {
-            string assemblyName = assembly.GetName().Name;
+		public static string GetString(string name, CultureInfo culture, Assembly assembly)
+        {
+        	string assemblyName = assembly.GetName().Name;
+        	ResourceManager resourceManager;
 
-            if (!_resourceManagerDictionary.Contains(assemblyName)) {
-                RegisterAssembly(assembly);
-            }
+        	lock (_resourceManagerDictionary.SyncRoot)
+        	{
+        		if (!_resourceManagerDictionary.Contains(assemblyName))
+        		{
+        			RegisterAssembly(assembly);
+        		}
 
-            // retrieve resource manager for assembly
-            ResourceManager resourceManager = (ResourceManager) 
-                _resourceManagerDictionary[assemblyName];
+        		// retrieve resource manager for assembly
+        		resourceManager = (ResourceManager) _resourceManagerDictionary[assemblyName];
+        	}
 
-            // try to get the required string from the given assembly
-            string localizedString = resourceManager.GetString(name, culture);
+        	// try to get the required string from the given assembly
+        	string localizedString = resourceManager.GetString(name, culture);
 
-            // if the given assembly does not contain the required string, then
-            // try to get it from the shared satellite assembly, if registered
-            if (localizedString == null && _sharedResourceManager != null) {
-                return _sharedResourceManager.GetString(name, culture);
-            }
-            return localizedString;
+        	// if the given assembly does not contain the required string, then
+        	// try to get it from the shared satellite assembly, if registered
+        	if (localizedString == null && _sharedResourceManager != null)
+        	{
+        		return _sharedResourceManager.GetString(name, culture);
+        	}
+        	return localizedString;
         }
 
-        #endregion Public Static Methods
+    	#endregion Public Static Methods
 
         #region Private Static Methods
 
@@ -205,17 +211,16 @@ namespace NAnt.Core.Util {
         /// A <see cref="System.Reflection.Assembly" /> that represents the
         /// assembly to register.
         /// </param>
-        private static void RegisterAssembly(Assembly assembly) {
-            lock (_resourceManagerDictionary) {
-                string assemblyName = assembly.GetName().Name;
+		private static void RegisterAssembly(Assembly assembly)
+        {
+        	string assemblyName = assembly.GetName().Name;
 
-                _resourceManagerDictionary.Add(assemblyName,
-                    new ResourceManager(GetResourceName(assemblyName), 
-                    assembly));
-            }
+        	_resourceManagerDictionary.Add(assemblyName,
+        	                               new ResourceManager(GetResourceName(assemblyName),
+        	                                                   assembly));
         }
 
-        /// <summary>
+    	/// <summary>
         /// Determines the manifest resource name of the resource holding the
         /// localized strings.
         /// </summary>
