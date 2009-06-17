@@ -1,6 +1,6 @@
 #NAnt make file for *nix
 MONO=mono
-MCS=mcs
+MCS=gmcs
 RESGEN=resgen
 
 ifndef DIRSEP
