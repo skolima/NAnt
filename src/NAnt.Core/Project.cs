@@ -183,7 +183,7 @@ namespace NAnt.Core {
         /// <param name="threshold">The message threshold.</param>
         /// <param name="indentLevel">The project indentation level.</param>
         public Project(XmlDocument doc, Level threshold, int indentLevel) {
-        	// use NAnt settings from application configuration file for loading 
+            // use NAnt settings from application configuration file for loading 
             // internal configuration settings
             _configurationNode = GetConfigurationNode();
 
@@ -206,7 +206,7 @@ namespace NAnt.Core {
         /// library.
         /// </remarks>
         public Project(XmlDocument doc, Level threshold, int indentLevel, XmlNode configurationNode) {
-        	// set configuration node to use for loading internal configuration 
+            // set configuration node to use for loading internal configuration 
             // settings
             _configurationNode = configurationNode;
 
@@ -228,7 +228,7 @@ namespace NAnt.Core {
         /// If the source is a uri of form 'file:///path' then use the path part.
         /// </remarks>
         public Project(string uriOrFilePath, Level threshold, int indentLevel) {
-        	// use NAnt settings from application configuration file for loading 
+            // use NAnt settings from application configuration file for loading 
             // internal configuration settings
             _configurationNode = GetConfigurationNode();
 
@@ -255,7 +255,7 @@ namespace NAnt.Core {
         /// If the source is a uri of form 'file:///path' then use the path part.
         /// </remarks>
         public Project(string uriOrFilePath, Level threshold, int indentLevel, XmlNode configurationNode) {
-        	// set configuration node to use for loading internal configuration 
+            // set configuration node to use for loading internal configuration 
             // settings
             _configurationNode = configurationNode;
 
@@ -282,7 +282,7 @@ namespace NAnt.Core {
         /// discovery of extension assemblies and framework configuration.
         /// </remarks>
         internal Project(string uriOrFilePath, Project parent) {
-        	// set configuration node to use for loading internal configuration 
+            // set configuration node to use for loading internal configuration 
             // settings
             _configurationNode = parent.ConfigurationNode;
 
@@ -317,14 +317,13 @@ namespace NAnt.Core {
         /// Optimized for framework initialization projects, by skipping automatic
         /// discovery of extension assemblies and framework configuration.
         /// </remarks>
-        internal Project(XmlDocument doc)
-        {
-        	// initialize project
+        internal Project(XmlDocument doc) {
+            // initialize project
             CtorHelper(doc, Level.None, 0, Optimizations.SkipAutomaticDiscovery |
                 Optimizations.SkipFrameworkConfiguration);
         }
-
-    	#endregion Internal Instance Constructors
+    
+        #endregion Internal Instance Constructors
 
         #region Public Instance Properties
 
@@ -1115,7 +1114,7 @@ namespace NAnt.Core {
 
 			CheckPendingExceptions();
 
-        	// restore calling target, as a <call> task might have caused the 
+            // restore calling target, as a <call> task might have caused the 
             // current target to be executed and when finished executing this 
             // target, the target that contained the <call> task should be 
             // considered the current target again
@@ -1135,7 +1134,7 @@ namespace NAnt.Core {
     		}
     	}
 
-    	/// <summary>
+        /// <summary>
         /// Executes the default target and wraps in error handling and time 
         /// stamping.
         /// </summary>
