@@ -1030,8 +1030,8 @@ namespace NAnt.Core {
         public void Execute(string targetName) {
             Execute(targetName, true);
         }
-        
-        /// <summary>
+
+		/// <summary>
         /// Executes a specific target.
         /// </summary>
         /// <param name="targetName">The name of the target to execute.</param>
@@ -1039,7 +1039,22 @@ namespace NAnt.Core {
         /// <remarks>
         /// Global tasks are not executed.
         /// </remarks>
-        public void Execute(string targetName, bool forceDependencies) {
+		public void Execute(string targetName, bool forceDependencies)
+		{
+			Execute(targetName, forceDependencies, Environment.ProcessorCount * 2);
+		}
+
+    	/// <summary>
+        /// Executes a specific target.
+        /// </summary>
+        /// <param name="targetName">The name of the target to execute.</param>
+        /// <param name="forceDependencies">Whether dependencies should be forced to execute</param>
+        /// <param name="workerThreads">Number of worker threads to spawn
+        /// (0 to only execute targets using main thread)</param>
+        /// <remarks>
+        /// Global tasks are not executed.
+        /// </remarks>
+        public void Execute(string targetName, bool forceDependencies, int workerThreads) {
             // sort the dependency tree, and run everything from the
             // beginning until we hit our targetName.
             // 
@@ -1077,7 +1092,7 @@ namespace NAnt.Core {
 						{
 							lock (activeThreadCountSyncRoot)
 							{
-								if (activeThreadCount < Environment.ProcessorCount * 2)
+								if (activeThreadCount < workerThreads)
 								{
 									Thread worker = new Thread((target) => 
 										{
