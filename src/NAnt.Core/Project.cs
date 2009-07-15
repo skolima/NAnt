@@ -1098,15 +1098,19 @@ namespace NAnt.Core {
 										{
 											try
 											{
-												((Target) target).Execute();
+												((Target)target).Execute();
 											}
 											catch (Exception ex)
 											{
 												workerThreadException = ex;
 											}
-											lock (activeThreadCountSyncRoot)
-												activeThreadCount--;
-											workerFinished.Set();
+											finally
+											{
+												lock (activeThreadCountSyncRoot)
+													activeThreadCount--;
+												workerFinished.Set();
+												OnTargetExecuted(target, new BuildEventArgs((Target)target));
+											}
 										});
 									worker.Name = String.Format("[W{0}] {1}", workerId++, currentTarget.Name);
 									worker.Start(currentTarget);
@@ -1114,8 +1118,16 @@ namespace NAnt.Core {
 									break;
 								}
 							}
-							// no worker threads available, execute on MainThread
-							currentTarget.Execute();
+
+							try
+							{
+								// no worker threads available, execute on MainThread
+								currentTarget.Execute();
+							}
+							finally
+							{
+								OnTargetExecuted(currentTarget, new BuildEventArgs(currentTarget));
+							}
 							break;
 						}
                 		// TODO: in theory, the timeout here is not needed if we don't deadlock
