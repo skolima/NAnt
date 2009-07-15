@@ -1148,18 +1148,29 @@ namespace NAnt.Core {
             _currentTarget = callingTarget;
         }
 
-    	private void CheckPendingExceptions()
-    	{
-    		if (workerThreadException != null)
-    		{
-    			Exception exception =
-    				(Exception) Activator.CreateInstance(
-    				            	workerThreadException.GetType(),
-    				            	workerThreadException.Message,
-    				            	workerThreadException);
-    			throw exception;
-    		}
-    	}
+		private void CheckPendingExceptions()
+		{
+			if (workerThreadException != null)
+			{
+				if (typeof(BuildException).IsAssignableFrom(workerThreadException.GetType()))
+				{
+					var exception = (BuildException)Activator.CreateInstance(
+						workerThreadException.GetType(),
+						workerThreadException.Message,
+						((BuildException)workerThreadException).Location,
+						workerThreadException);
+					throw exception;
+				}
+				else
+				{
+					var exception = (Exception) Activator.CreateInstance(
+						workerThreadException.GetType(),
+						workerThreadException.Message,
+						workerThreadException);
+					throw exception;
+				}
+			}
+		}
 
         /// <summary>
         /// Executes the default target and wraps in error handling and time 
